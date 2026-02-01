@@ -1,0 +1,146 @@
+Goal 
+The purpose of this assignment is to showcase your skills in analyzing business needs and in utilizing Python and SQL to provide solutions. 
+Assignment 
+Scenario: 
+Company XYZ held a promo sale for their signature items named: x,y,z. Sales are at an all-time high, but they want to create a marketing strategy to target age groups of people by looking at total quantities purchased. 
+They then created a database with these business rules: 
+• A sales receipt can have multiple items in an order. 
+• For every order, the clerk records all quantities for all items, including items not bought (which they denote with quantity=NULL). 
+• Each customer can do multiple sales transactions, and has his/her age stored in a database. 
+Refer to the image below for the table structures and relationships. 
+
+Objectives 
+Create a Python script that can: 
+1. connect to the SQLite3 database provided 
+2. extract the total quantities of each item bought per customer aged 18-35. - For each customer, get the sum of each item 
+- Items with no purchase (total quantity=0) should be omitted from the final list 
+- No decimal points allowed (The company doesn’t sell half of an item ;) ) Challenge: Provide 2 solutions, one using purely SQL, the other using Pandas 3. store the query to a CSV file, delimiter should be the semicolon character (';')
+Test case: 
+Customer 1 bought Item X on multiple occasions, totaling 10 for Item X only Customer 2 bought one of each item only once, totaling 1 each Item Customer 3 bought Item Z on two occasions, totaling 2 for Item Z only Then the output file should look like the example below: 
+Customer;Age;Item;Quantity 
+1;21;x;10 
+2;23;x;1 
+2;23;y;1 
+2;23;z;1 
+3;35;z;2(Note: Actual values will vary) 
+
+
+
+
+SOLUTION:
+
+
+SQL Query:
+
+SELECT
+    c.customer_id AS Customer,
+    c.age AS Age,
+    i.item_name AS Item,
+    CAST(SUM(s.quantity) AS INTEGER) AS Quantity
+FROM customers c
+JOIN sales s ON c.customer_id = s.customer_id
+JOIN items i ON s.item_id = i.item_id
+WHERE c.age BETWEEN 18 AND 35
+  AND s.quantity IS NOT NULL
+GROUP BY c.customer_id, c.age, i.item_name
+HAVING SUM(s.quantity) > 0
+ORDER BY c.customer_id;
+
+
+Python Scripit(SQL > CSV): 
+
+import sqlite3
+import csv
+
+conn = sqlite3.connect("sales.db")
+cursor = conn.cursor()
+
+query = """
+SELECT
+    c.customer_id AS Customer,
+    c.age AS Age,
+    i.item_name AS Item,
+    CAST(SUM(s.quantity) AS INTEGER) AS Quantity
+FROM customers c
+JOIN sales s ON c.customer_id = s.customer_id
+JOIN items i ON s.item_id = i.item_id
+WHERE c.age BETWEEN 18 AND 35
+  AND s.quantity IS NOT NULL
+GROUP BY c.customer_id, c.age, i.item_name
+HAVING SUM(s.quantity) > 0
+ORDER BY c.customer_id;
+"""
+
+rows = cursor.execute(query).fetchall()
+
+with open("output_sql.csv", "w", newline="") as f:
+    writer = csv.writer(f, delimiter=";")
+    writer.writerow(["Customer", "Age", "Item", "Quantity"])
+    writer.writerows(rows)
+
+conn.close()
+
+* HAVING SUM(quantity)>0 removes non-purchased items
+* CAST(..AS INETGER) avoids decimals
+
+
+
+Python Script (Pandas):
+
+import sqlite3
+import pandas as pd
+
+# Connect to DB
+conn = sqlite3.connect("sales.db")
+
+# Load tables
+customers = pd.read_sql("SELECT * FROM customers", conn)
+sales = pd.read_sql("SELECT * FROM sales", conn)
+items = pd.read_sql("SELECT * FROM items", conn)
+
+# Merge tables
+df = sales.merge(customers, on="customer_id") \
+          .merge(items, on="item_id")
+
+# Filter age group and valid quantities
+df = df[(df["age"].between(18, 35)) & (df["quantity"].notna())]
+
+# Aggregate
+result = (
+    df.groupby(["customer_id", "age", "item_name"])["quantity"]
+    .sum()
+    .reset_index()
+)
+
+# Remove zero quantities
+result = result[result["quantity"] > 0]
+
+# Convert to int
+result["quantity"] = result["quantity"].astype(int)
+
+# Rename columns
+result.columns = ["Customer", "Age", "Item", "Quantity"]
+
+# Export to CSV
+result.to_csv("output_pandas.csv", sep=";", index=False)
+
+conn.close() 
+
+
+
+* Pandas groupby().sum() handles multiple purchases
+* notna() removes NULL quantities
+* Explict astype(int) ensures no decimals
+* Output matches required format exactly
+
+
+
+
+OUTPUT:
+
+Customer;Age;Item;Quantity 
+1;21;x;10 
+2;23;x;1 
+2;23;y;1 
+2;23;z;1 
+3;35;z;2
